@@ -1,21 +1,18 @@
 import tensorflow as tf
-import numpy as np
+
 from typing import Union
 
 
 def create_train_op(
         loss: tf.Tensor,
         learning_rate: Union[tf.Tensor, float],
-        momentum: Union[tf.Tensor, float]) -> tf.Operation:
-    """Create train op
+        momentum: Union[tf.Tensor, float]):
+    """Create training op
 
-    Args:
-        loss (tf.Tensor): Loss tensor
-        learning_rate (float): Initial learning rate or decaying learning rate tensor
-        momentum (float): Momentum value
-
-    Returns:
-        train op
+    Arguments:
+        loss: loss tensor
+        learning_rate: either tensor or float
+        momentum
     """
 
     global_step = tf.train.get_global_step()
@@ -38,6 +35,16 @@ def create_estimator_fn(
         model_fn,
         loss_fn,
         metrics_fn):
+    """First order function which returns estimator_fn
+
+    Arguments:
+        model_fn: function to create computation graph and get model output
+        loss_fn: function to get loss tensor
+        metrics_fn: function to get metrics dict
+
+    Returns:
+        estimator_fn with signature (features, labels, mode, params) and returns EstimatorSpec
+    """
 
     def estimator_fn(features, labels, mode, params):
 
@@ -46,18 +53,26 @@ def create_estimator_fn(
         tf.keras.backend.set_learning_phase(is_training)
 
         images = tf.identity(features, name="images")
+
+        logits = tf.identity(model_fn(images, is_training=is_training), name="logits")
+
+        preds = tf.identity(tf.expand_dims(tf.argmax(logits, axis=3), axis=3), name="predictions")
+
+        if mode == tf.estimator.ModeKeys.PREDICT:
+            return tf.estimator.EstimatorSpec(
+                mode=mode,
+                predictions=preds,
+                export_outputs={
+                    "predictions": tf.estimator.export.PredictOutput(preds)
+                })
+
         labels = tf.identity(labels, name="labels")
-
-        global_step = tf.train.get_or_create_global_step()
-
-        logits = tf.identity(model_fn(images), name="logits")
-
-        with tf.variable_scope("predictions"):
-            preds = tf.identity(tf.expand_dims(tf.argmax(logits, axis=3), axis=3), name="predictions")
 
         loss = loss_fn(logits=logits, labels=labels, weight_decay=params.weight_decay)
 
         metrics_ops = metrics_fn(predictions=preds, labels=labels)
+
+        global_step = tf.train.get_or_create_global_step()
 
         if is_training:
             learning_rate = tf.train.polynomial_decay(
@@ -67,22 +82,18 @@ def create_estimator_fn(
                 end_learning_rate=params.end_learning_rate,
                 power=params.learning_rate_decay)
             tf.summary.scalar("learning_rate", learning_rate)
-            train_op = create_train_op(loss, learning_rate, params.momentum)
+            train_op = create_train_op(loss, params.learning_rate, params.momentum)
         else:
             train_op = None
 
-        summary_prefix = "train"
-        if not is_training:
-            summary_prefix = "eval"
+        tf.summary.image("images", images)
+        tf.summary.image("labels", tf.cast(tf.scalar_mul(255, labels), dtype=tf.uint8))
+        tf.summary.image("predictions", tf.cast(preds, dtype=tf.float32) * images)
 
-        tf.summary.image(f"{summary_prefix}_images", images)
-        tf.summary.image(f"{summary_prefix}_labels", tf.cast(tf.scalar_mul(255, labels), dtype=tf.uint8))
-        tf.summary.image(f"{summary_prefix}_predictions", tf.cast(preds, dtype=tf.float32) * images)
+        tf.summary.scalar("loss", loss)
 
-        tf.summary.scalar(f"{summary_prefix}_loss", loss)
-
-        tf.summary.scalar(f"{summary_prefix}_accuracy", metrics_ops["accuracy"][1])
-        tf.summary.scalar(f"{summary_prefix}_iou", metrics_ops["iou"][1])
+        tf.summary.scalar("accuracy", metrics_ops["accuracy"][1])
+        tf.summary.scalar("iou", metrics_ops["iou"][1])
 
         return tf.estimator.EstimatorSpec(
             mode=mode,
