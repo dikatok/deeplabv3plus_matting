@@ -3,6 +3,18 @@ import tensorflow as tf
 
 def iou_metric_fn(labels,
                   predictions):
+    """Custom iou metrics
+
+    The diff from tf.metrics.mean_iou is this fn only calculates iou for foreground (predictions == labels == 1)
+
+    Arguments:
+        labels
+        predictions (argmax output)
+
+    Returns:
+        iou
+        update_op
+    """
 
     preds_ones = tf.equal(predictions, 1)
     labels_ones = tf.equal(labels, 1)
@@ -16,6 +28,11 @@ def iou_metric_fn(labels,
 
 
 def create_metrics_fn():
+    """First order function which returns metrics_fn
+
+    Returns:
+        metrics_fn with signature (predictions, labels) and returns dict of iou and acc
+    """
 
     def metrics_fn(predictions, labels):
         with tf.variable_scope("iou"):

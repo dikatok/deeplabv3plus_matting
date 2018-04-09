@@ -31,7 +31,8 @@ def main(_):
 
     model_fn = create_model_fn(
         backbone=FLAGS.backbone,
-        img_size=image_size)
+        img_size=image_size,
+        output_stride=16)
 
     loss_fn = create_loss_fn()
 
@@ -45,7 +46,6 @@ def main(_):
     config = tf.estimator.RunConfig(
         tf_random_seed=42,
         save_summary_steps=FLAGS.summary_steps,
-        # save_checkpoints_steps=FLAGS.checkpoints_steps,
         save_checkpoints_steps=num_train_samples // FLAGS.batch_size,
         log_step_count_steps=FLAGS.summary_steps,
         model_dir=FLAGS.model_dir)
@@ -54,7 +54,8 @@ def main(_):
         learning_rate=FLAGS.learning_rate,
         learning_rate_decay=FLAGS.learning_rate_decay,
         end_learning_rate=FLAGS.end_learning_rate,
-        learning_rate_decay_steps=FLAGS.train_epochs * num_train_samples // FLAGS.batch_size,
+        # learning_rate_decay_steps=2000,
+        learning_rate_decay_steps=2 * FLAGS.train_epochs * num_train_samples // FLAGS.batch_size,
         momentum=FLAGS.momentum,
         weight_decay=FLAGS.weight_decay)
 
@@ -79,20 +80,9 @@ def main(_):
         scope="val_inputs",
         is_training=False)
 
-    def serving_input_fn():
-        images = tf.placeholder(shape=[None, image_size[0], image_size[1], 3], dtype=tf.float32)
-        return tf.estimator.export.TensorServingInputReceiver(images, images)
-
-    exporter = tf.estimator.LatestExporter(
-        name='Servo',
-        serving_input_receiver_fn=serving_input_fn,
-        assets_extra=None,
-        as_text=False,
-        exports_to_keep=5)
-
     train_spec = tf.estimator.TrainSpec(
         input_fn=train_inputs_fn,
-        max_steps=FLAGS.train_epochs * num_train_samples // FLAGS.batch_size,
+        # max_steps=FLAGS.train_epochs * num_train_samples // FLAGS.batch_size,
         hooks=[train_init_hook]
     )
 
@@ -101,11 +91,10 @@ def main(_):
         steps=None,
         name=None,
         hooks=[val_init_hook],
-        exporters=None,  # Iterable of Exporters, or single one or None.
         start_delay_secs=120,
-        throttle_secs=600
+        throttle_secs=1200
     )
-    # estimator.evaluate(val_inputs_fn, steps=None, hooks=[val_init_hook])
+
     tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
 
 
