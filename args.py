@@ -2,15 +2,15 @@ import tensorflow as tf
 
 
 def define_train_args():
+    """
+
+    :return:
+    """
+
     tf.app.flags.DEFINE_string(
         name='model_dir',
         default='./ckpts',
         help='Directory to save checkpoints.')
-
-    tf.app.flags.DEFINE_string(
-        name='log_dir',
-        default='./logs',
-        help='Directory to save summaries.')
 
     tf.app.flags.DEFINE_bool(
         name='restart_training',
@@ -29,13 +29,8 @@ def define_train_args():
 
     tf.app.flags.DEFINE_integer(
         name='image_size',
-        default=128,
+        default=299,
         help='Input image size.')
-
-    tf.app.flags.DEFINE_string(
-        name='data_format',
-        default='channels_first',
-        help="Determine channels axis ('channels_first' or 'channels_last').")
 
     tf.app.flags.DEFINE_string(
         name='backbone',
@@ -49,7 +44,7 @@ def define_train_args():
 
     tf.app.flags.DEFINE_integer(
         name='summary_steps',
-        default=2,
+        default=50,
         help='Elapsed steps interval to save summaries.')
 
     tf.app.flags.DEFINE_integer(
@@ -91,3 +86,30 @@ def define_train_args():
         name='weight_decay',
         default=4e-5,
         help='L2 regularization weight decay.')
+
+
+def define_convert_saved_model_args():
+    """
+
+    :return:
+    """
+
+    tf.app.flags.DEFINE_string(
+        name='model_dir',
+        default='./ckpts',
+        help='Directory to save checkpoints.')
+
+    tf.app.flags.DEFINE_string(
+        name='saved_model_dir',
+        default='./saved_model',
+        help='Directory to save checkpoints.')
+
+    tf.app.flags.DEFINE_integer(
+        name='image_size',
+        default=299,
+        help='Input image size.')
+
+    tf.app.flags.DEFINE_string(
+        name='backbone',
+        default='xception',
+        help='Input image size.')
