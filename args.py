@@ -44,13 +44,8 @@ def define_train_args():
 
     tf.app.flags.DEFINE_integer(
         name='summary_steps',
-        default=50,
+        default=10,
         help='Elapsed steps interval to save summaries.')
-
-    tf.app.flags.DEFINE_integer(
-        name='checkpoints_steps',
-        default=1000,
-        help='Elapsed steps interval to save checkpoints.')
 
     tf.app.flags.DEFINE_integer(
         name='val_epoch_interval',
