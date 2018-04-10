@@ -69,6 +69,7 @@ def main(_):
         num_epochs=FLAGS.val_epoch_interval,
         batch_size=FLAGS.batch_size,
         image_size=image_size,
+        shuffle_buffer_size=num_train_samples,
         scope="train_inputs",
         is_training=True)
 
@@ -77,12 +78,13 @@ def main(_):
         num_epochs=1,
         batch_size=FLAGS.batch_size,
         image_size=image_size,
+        shuffle_buffer_size=num_val_samples,
         scope="val_inputs",
         is_training=False)
 
     train_spec = tf.estimator.TrainSpec(
         input_fn=train_inputs_fn,
-        # max_steps=FLAGS.train_epochs * num_train_samples // FLAGS.batch_size,
+        max_steps=FLAGS.train_epochs * num_train_samples // FLAGS.batch_size,
         hooks=[train_init_hook]
     )
 

@@ -14,10 +14,10 @@ def create_loss_fn():
             with tf.variable_scope("cross_entropy"):
                 cross_entropy_loss = tf.losses.sparse_softmax_cross_entropy(logits=logits, labels=labels)
 
-            # with tf.variable_scope("l2_reg"):
-            #     l2_reg = weight_decay * tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
+            with tf.variable_scope("l2_reg"):
+                l2_reg = weight_decay * tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
 
-            total_loss = cross_entropy_loss
+            total_loss = cross_entropy_loss + l2_reg
 
         return total_loss
 

@@ -91,13 +91,13 @@ def _process_image_files_batch(
                 os.path.splitext(os.path.split(image_filename)[-1])[0] + mask_suffix)
             try:
                 image_buffer = tf.gfile.FastGFile(image_filename, 'rb').read()
-                try:
-                    mask_buffer = tf.gfile.FastGFile(mask_filename, 'rb').read()
-                except:
+                if not os.path.exists(mask_filename):
                     mask_filename = os.path.join(
                         mask_dir,
                         os.path.splitext(os.path.split(image_filename)[-1])[0] + ".jpg")
-                    mask_buffer = tf.gfile.FastGFile(mask_filename, 'rb').read()
+                if not os.path.exists(mask_filename):
+                    continue
+                mask_buffer = tf.gfile.FastGFile(mask_filename, 'rb').read()
                 example = _convert_to_example(image_buffer, mask_buffer, image_filename, mask_filename)
                 writer.write(example.SerializeToString())
                 shard_counter += 1

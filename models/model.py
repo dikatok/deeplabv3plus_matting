@@ -74,7 +74,7 @@ def _aspp(inputs,
             is_training=is_training,
             name="conv1x1")
 
-        conv3x3_atrous1 = separable_conv(
+        conv3x3_1 = separable_conv(
             inputs,
             filters=filters,
             kernel_size=3,
@@ -83,7 +83,7 @@ def _aspp(inputs,
             is_training=is_training,
             name="conv3x3r6")
 
-        conv3x3_atrous2 = separable_conv(
+        conv3x3_2 = separable_conv(
             inputs,
             filters=filters,
             kernel_size=3,
@@ -92,7 +92,7 @@ def _aspp(inputs,
             is_training=is_training,
             name="conv3x3r12")
 
-        conv3x3_atrous3 = separable_conv(
+        conv3x3_3 = separable_conv(
             inputs,
             filters=filters,
             kernel_size=3,
@@ -111,9 +111,9 @@ def _aspp(inputs,
 
         outputs = tf.concat(
             [conv1x1,
-             conv3x3_atrous1,
-             conv3x3_atrous2,
-             conv3x3_atrous3,
+             conv3x3_1,
+             conv3x3_2,
+             conv3x3_3,
              pool],
             axis=-1)
 
@@ -128,7 +128,7 @@ def _aspp(inputs,
 
         outputs = tf.layers.dropout(
             outputs,
-            rate=0.1,
+            rate=0.5,
             name="dropout")
 
     return outputs
@@ -222,12 +222,19 @@ def _decoder(low_level_features,
             filters=2,
             kernel_size=1,
             is_training=is_training,
-            name="logits_conv")  # pre-resized logits, channels = 2
+            name="conv")
 
         outputs = resize_bilinear(
             outputs,
             target_size=output_size,
-            name="logits_resize")  # resized logits to inputs size
+            name="conv_resize")
+
+        outputs = conv(
+            outputs,
+            filters=2,
+            kernel_size=1,
+            is_training=is_training,
+            name="logits_conv")  # logits
 
     return outputs
 

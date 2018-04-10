@@ -1,6 +1,6 @@
 import tensorflow as tf
-from tensorflow.contrib import image as contrib_image
-from tensorflow.contrib import data
+
+from utils.preprocessing_utils import random_crop, random_flip_left_right, random_rescale, random_rotate
 
 
 class IteratorInitializerHook(tf.train.SessionRunHook):
@@ -12,18 +12,19 @@ class IteratorInitializerHook(tf.train.SessionRunHook):
 
     def after_create_session(self, session, coord):
         """Initialise the iterator after the session has been created."""
+        if self.iterator_initializer_func is None:
+            raise Exception("IteratorInitializerHook.iterator_initializer_func is not assigned")
         self.iterator_initializer_func(session)
 
 
 def _create_parse_record_fn(image_size: (int, int)):
-    """
+    """Create parse_record_fn which is used to parse single example from tf records
 
-    :param image_size:
-    :return:
+    Arguments:
+        image_size: desired size of image and label
     """
 
     def parse_record_fn(example: tf.train.Example):
-
         features = {
             "image": tf.FixedLenFeature((), tf.string),
             "mask": tf.FixedLenFeature((), tf.string),
@@ -46,233 +47,157 @@ def _create_parse_record_fn(image_size: (int, int)):
     return parse_record_fn
 
 
-def _create_one_shot_iterator(
-        tfrecord_filenames: [str],
-        num_epochs: int,
-        batch_size: int,
-        image_size: (int, int)):
-    """
+def _create_one_shot_iterator(tfrecord_filenames: [str],
+                              num_epochs: int,
+                              batch_size: int,
+                              image_size: (int, int),
+                              shuffle_buffer_size: int,
+                              is_training: bool):
+    """Function to create one shot iterator
 
-    :param tfrecord_filenames:
-    :param num_epochs:
-    :param batch_size:
-    :param image_size:
-    :return:
+    Arguments:
+        tfrecord_filenames: list of tfrecord filenames
+        num_epochs: number of epochs to repeat
+        batch_size: number of samples per batch
+        image_size: desired image and label size
+
+    Returns:
+        one_shot_iterator which yield batches of (images, labels)
     """
 
     dataset = tf.data.TFRecordDataset(tfrecord_filenames)
+
+    if is_training:
+        dataset = dataset.shuffle(buffer_size=shuffle_buffer_size)
+
     dataset = dataset.map(_create_parse_record_fn(image_size))
-    dataset = dataset.shuffle(buffer_size=batch_size)
-    dataset = dataset.batch(batch_size)
+
+    dataset = dataset.prefetch(batch_size)
+
     dataset = dataset.repeat(num_epochs)
+
+    dataset = dataset.batch(batch_size)
+
+    dataset = dataset.map(lambda images, labels: _augment(
+        images,
+        labels,
+        crop_height=image_size[0],
+        crop_width=image_size[1],
+        min_scale=0.7,
+        max_scale=1.3))
 
     return dataset.make_one_shot_iterator()
 
 
-def _create_initializable_iterator(
-        tfrecord_filenames: [str],
-        num_epochs: int,
-        batch_size: int,
-        image_size: (int, int)):
-    """
+def _create_initializable_iterator(tfrecord_filenames: [str],
+                                   num_epochs: int,
+                                   batch_size: int,
+                                   image_size: (int, int),
+                                   shuffle_buffer_size: int,
+                                   is_training: bool):
+    """Function to create initializable iterator
 
-    :param tfrecord_filenames:
-    :param num_epochs:
-    :param batch_size:
-    :param image_size:
-    :return:
+    Arguments:
+        tfrecord_filenames: list of tfrecord filenames
+        num_epochs: number of epochs to repeat
+        batch_size: number of samples per batch
+        image_size: desired image and label size
+
+    Returns:
+        initializable_iterator which yield batches of (images, labels)
     """
 
     dataset = tf.data.TFRecordDataset(tfrecord_filenames)
+
+    if is_training:
+        dataset = dataset.shuffle(buffer_size=shuffle_buffer_size)
+
     dataset = dataset.map(_create_parse_record_fn(image_size))
-    dataset = dataset.shuffle(buffer_size=batch_size)
-    dataset = dataset.batch(batch_size)
+
+    dataset = dataset.prefetch(batch_size)
+
     dataset = dataset.repeat(num_epochs)
+
+    dataset = dataset.batch(batch_size)
+
+    dataset = dataset.map(lambda images, labels: _augment(
+        images,
+        labels,
+        crop_height=image_size[0],
+        crop_width=image_size[1],
+        min_scale=0.7,
+        max_scale=1.3))
 
     return dataset.make_initializable_iterator()
 
 
-def random_crop_and_pad_image_and_labels(image, labels, size):
-  """Randomly crops `image` together with `labels`.
+def _augment(images,
+             labels,
+             crop_height,
+             crop_width,
+             min_scale=1.,
+             max_scale=1.):
 
-  Args:
-    image: A Tensor with shape [D_1, ..., D_K, N]
-    labels: A Tensor with shape [D_1, ..., D_K, M]
-    size: A Tensor with shape [K] indicating the crop size.
-  Returns:
-    A tuple of (cropped_image, cropped_label).
-  """
-  combined = tf.concat([image, labels], axis=3)
-  image_shape = tf.shape(image)
+    images_shape = images.shape.as_list()
 
-  last_label_dim = tf.shape(labels)[-1]
-  last_image_dim = tf.shape(image)[-1]
-  combined_crop = tf.random_crop(
-      combined,
-      size=[image_shape[0], size[0], size[1], 4])
-  return (combined_crop[:, : , :, :last_image_dim],
-          combined_crop[:, :, :, last_image_dim:])
+    images = tf.cast(images, tf.float32)
+    labels = tf.cast(labels, tf.float32)
 
+    images, labels = random_rescale(images, labels, min_scale, max_scale)
 
-def get_random_scale(min_scale_factor, max_scale_factor, step_size):
-  """Gets a random scale value.
+    images, labels = random_crop(images, labels, crop_height, crop_width)
 
-  Args:
-    min_scale_factor: Minimum scale value.
-    max_scale_factor: Maximum scale value.
-    step_size: The step size from minimum to maximum value.
+    images, labels = random_flip_left_right(images, labels)
 
-  Returns:
-    A random scale value selected between minimum and maximum value.
+    images, labels = random_rotate(images, labels, -0.5, 0.5)
 
-  Raises:
-    ValueError: min_scale_factor has unexpected value.
-  """
-  if min_scale_factor < 0 or min_scale_factor > max_scale_factor:
-    raise ValueError('Unexpected value of min_scale_factor.')
+    labels = tf.cast(labels, dtype=tf.int32)
 
-  if min_scale_factor == max_scale_factor:
-    return tf.to_float(min_scale_factor)
+    images.set_shape([images_shape[0], crop_height, crop_width, 3])
+    labels.set_shape([images_shape[0], crop_height, crop_width, 1])
 
-  # When step_size = 0, we sample the value uniformly from [min, max).
-  if step_size == 0:
-    return tf.random_uniform([1],
-                             minval=min_scale_factor,
-                             maxval=max_scale_factor)
-
-  # When step_size != 0, we randomly select one discrete value from [min, max].
-  num_steps = int((max_scale_factor - min_scale_factor) / step_size + 1)
-  scale_factors = tf.lin_space(min_scale_factor, max_scale_factor, num_steps)
-  shuffled_scale_factors = tf.random_shuffle(scale_factors)
-  return shuffled_scale_factors[0]
+    return images, labels
 
 
-def randomly_scale_image_and_label(image, label=None, scale=1.0):
-  """Randomly scales image and label.
+def create_inputs_fn(tfrecord_filenames: [str],
+                     num_epochs: int,
+                     batch_size: int,
+                     image_size: (int, int),
+                     shuffle_buffer_size: int,
+                     is_training: bool,
+                     scope: str):
+    """Create inputs_fn
 
-  Args:
-    image: Image with shape [height, width, 3].
-    label: Label with shape [height, width, 1].
-    scale: The value to scale image and label.
+    Arguments:
+        tfrecord_filenames
+        num_epochs
+        batch_size
+        image_size
+        shuffle_buffer_size
+        is_training: whether to augment the data or not
+        scope
 
-  Returns:
-    Scaled image and label.
-  """
-  # No random scaling if scale == 1.
-  if scale == 1.0:
-    return image, label
-  image_shape = tf.shape(image)
-  new_dim = tf.to_int32(tf.to_float([image_shape[1], image_shape[2]]) * scale)
-
-  # Need squeeze and expand_dims because image interpolation takes
-  # 4D tensors as input.
-  image = tf.image.resize_bilinear(
-      image,
-      new_dim,
-      align_corners=True)
-  if label is not None:
-    label = tf.image.resize_nearest_neighbor(
-        label,
-        new_dim,
-        align_corners=True)
-  return image, label
-
-
-def _augment(
-        image: tf.Tensor,
-        label: tf.Tensor,
-                               crop_height,
-                               crop_width,
-                               min_resize_value=None,
-                               max_resize_value=None,
-                               resize_factor=None,
-                               min_scale_factor=1.,
-                               max_scale_factor=1.,
-                               scale_factor_step_size=0.):
-
-    processed_image = tf.cast(image, tf.float32)
-
-    if label is not None:
-        label = tf.cast(label, tf.float32)
-
-
-    # Data augmentation by randomly scaling the inputs.
-    # print(processed_image.shape)
-
-    scale = get_random_scale(
-        min_scale_factor, max_scale_factor, scale_factor_step_size)
-    processed_image, label = randomly_scale_image_and_label(
-        processed_image, label, scale)
-
-    # print(processed_image.shape)
-    processed_image, label = random_crop_and_pad_image_and_labels(processed_image, label, (crop_height, crop_width))
-
-    # print(processed_image.shape)
-
-    cond_flip_lr = tf.cast(tf.random_uniform([], maxval=2, dtype=tf.int32), tf.bool)
-
-    def orig(images, masks):
-        return images, masks
-
-    def flip(images, masks):
-        return tf.map_fn(tf.image.flip_left_right, images), tf.map_fn(tf.image.flip_left_right, masks)
-
-    processed_image, label = tf.cond(cond_flip_lr, lambda: flip(processed_image, label), lambda: orig(processed_image, label))
-
-    rotate_rad = tf.random_uniform([], minval=-0.5, maxval=0.5)
-
-    def rotate(processed_image, label, rad=0):
-        return tf.contrib.image.rotate(processed_image, angles=rad), \
-               tf.contrib.image.rotate(label, angles=rad)
-
-    processed_image, label = rotate(processed_image, label, rotate_rad)
-    processed_image.set_shape([image.shape[0], crop_height, crop_width, 3])
-    label.set_shape([image.shape[0], crop_height, crop_width, 1])
-    label = tf.cast(label, dtype=tf.int32)
-    return processed_image, label
-
-
-def create_inputs_fn(
-        tfrecord_filenames: [str],
-        num_epochs: int,
-        batch_size: int,
-        image_size: (int, int),
-        scope: str,
-        is_training: bool):
-    """
-
-    :param tfrecord_filenames:
-    :param num_epochs:
-    :param batch_size:
-    :param image_size:
-    :param scope:
-    :param is_training:
-    :return:
+    Returns:
+        inputs_fn which returns batches of (images, labels)
+        init_hook: instance of SessionRunHook to initialize iterator on session created
     """
 
     iter_init_hook = IteratorInitializerHook()
 
     def inputs_fn():
-        with tf.variable_scope(scope):
-            iterator = _create_initializable_iterator(tfrecord_filenames, num_epochs, batch_size, image_size)
+        with tf.variable_scope(scope), tf.device("/cpu:0"):
+            iterator = _create_initializable_iterator(
+                tfrecord_filenames=tfrecord_filenames,
+                num_epochs=num_epochs,
+                batch_size=batch_size,
+                image_size=image_size,
+                shuffle_buffer_size=shuffle_buffer_size,
+                is_training=is_training)
 
-            images, masks = iterator.get_next()
-
-            if is_training:
-                images, masks = _augment(
-                    images,
-                    masks,
-                    crop_height=image_size[0],
-                    crop_width=image_size[1],
-                    min_resize_value=None,
-                    max_resize_value=None,
-                    resize_factor=None,
-                    min_scale_factor=1.0,
-                    max_scale_factor=1.3,
-                    scale_factor_step_size=0.1)
+            images, labels = iterator.get_next()
 
             iter_init_hook.iterator_initializer_func = lambda sess: sess.run(iterator.initializer)
 
-        return images, masks
+        return images, labels
 
     return inputs_fn, iter_init_hook

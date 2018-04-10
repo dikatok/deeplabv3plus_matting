@@ -75,20 +75,27 @@ def create_estimator_fn(
         global_step = tf.train.get_or_create_global_step()
 
         if is_training:
-            learning_rate = tf.train.polynomial_decay(
+            learning_rate = tf.train.exponential_decay(
                 learning_rate=params.learning_rate,
                 global_step=global_step,
-                decay_steps=params.learning_rate_decay_steps,
-                end_learning_rate=params.end_learning_rate,
-                power=params.learning_rate_decay)
+                decay_steps=200,
+                decay_rate=params.learning_rate_decay,
+                staircase=True
+            )
             tf.summary.scalar("learning_rate", learning_rate)
             train_op = create_train_op(loss, params.learning_rate, params.momentum)
         else:
             train_op = None
 
-        tf.summary.image("images", images)
-        tf.summary.image("labels", tf.cast(tf.scalar_mul(255, labels), dtype=tf.uint8))
-        tf.summary.image("predictions", tf.cast(preds, dtype=tf.float32) * images)
+        tf.summary.image("images", tf.concat([
+            images,
+            tf.tile(
+                tf.cast(tf.scalar_mul(255, labels), dtype=tf.float32),
+                multiples=tf.stack([1, 1, 1, 3])),
+            tf.tile(
+                tf.cast(tf.scalar_mul(255, preds), dtype=tf.float32),
+                multiples=tf.stack([1, 1, 1, 3]))],
+            axis=2))
 
         tf.summary.scalar("loss", loss)
 

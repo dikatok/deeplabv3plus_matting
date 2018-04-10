@@ -61,6 +61,8 @@ def xception_block(inputs,
 def xception_model_fn(output_stride: int):
     """First order function which returns model_fn
 
+    Xception65: entry(2 conv + 3 * 3 block) + middle(16 * 3 block) + exit(2 * 3 block)
+
     Arguments:
         output_stride (int): 'channels_first' or 'channels_last'
 
