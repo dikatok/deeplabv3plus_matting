@@ -78,13 +78,14 @@ def _create_one_shot_iterator(tfrecord_filenames: [str],
 
     dataset = dataset.batch(batch_size)
 
-    dataset = dataset.map(lambda images, labels: _augment(
-        images,
-        labels,
-        crop_height=image_size[0],
-        crop_width=image_size[1],
-        min_scale=0.7,
-        max_scale=1.3))
+    if is_training:
+        dataset = dataset.map(lambda images, labels: _augment(
+            images,
+            labels,
+            crop_height=image_size[0],
+            crop_width=image_size[1],
+            min_scale=0.7,
+            max_scale=1.3))
 
     return dataset.make_one_shot_iterator()
 
@@ -120,13 +121,14 @@ def _create_initializable_iterator(tfrecord_filenames: [str],
 
     dataset = dataset.batch(batch_size)
 
-    dataset = dataset.map(lambda images, labels: _augment(
-        images,
-        labels,
-        crop_height=image_size[0],
-        crop_width=image_size[1],
-        min_scale=0.7,
-        max_scale=1.3))
+    if is_training:
+        dataset = dataset.map(lambda images, labels: _augment(
+            images,
+            labels,
+            crop_height=image_size[0],
+            crop_width=image_size[1],
+            min_scale=0.5,
+            max_scale=1.5))
 
     return dataset.make_initializable_iterator()
 
@@ -137,6 +139,20 @@ def _augment(images,
              crop_width,
              min_scale=1.,
              max_scale=1.):
+    """Bunch of augmentations
+
+    Arguments:
+        images
+        labels
+        crop_height
+        crop_width
+        min_scale
+        max_scale
+
+    Returns:
+        augmented_images
+        autmented_labels
+    """
 
     images_shape = images.shape.as_list()
 

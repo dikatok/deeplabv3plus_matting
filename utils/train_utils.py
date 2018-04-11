@@ -78,7 +78,7 @@ def create_estimator_fn(
             learning_rate = tf.train.exponential_decay(
                 learning_rate=params.learning_rate,
                 global_step=global_step,
-                decay_steps=200,
+                decay_steps=2000,
                 decay_rate=params.learning_rate_decay,
                 staircase=True
             )
